@@ -21,6 +21,7 @@ var timeout int
 var verbose bool
 var enableIPv6 bool
 var url string
+var strict bool
 
 func main() {
 	_ = os.Unsetenv("ALL_PROXY")
@@ -36,6 +37,7 @@ func main() {
 	flag.IntVar(&timeout, "timeout", 10, "Timeout for every check")
 	flag.BoolVar(&verbose, "v", false, "Verbose output")
 	flag.BoolVar(&enableIPv6, "46", false, "Enable IPv6 in additional to IPv4")
+	flag.BoolVar(&strict, "strict", false, "Strict check (filters out CDNs and other Reality servers)")
 	flag.StringVar(&url, "url", "", "Crawl the domain list from a URL, "+
 		"e.g. https://launchpad.net/ubuntu/+archivemirrors")
 	flag.Parse()

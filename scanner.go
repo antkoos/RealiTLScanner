@@ -2,12 +2,36 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 )
+
+func StrictCheck(x509 *x509.Certificate, targetIP net.IP) bool {
+	if len(x509.DNSNames) == 0 {
+		return true
+	}
+	if !strict {
+		return false
+	}
+	for _, dnsName := range x509.DNSNames {
+		name := dnsName
+		ips, err := net.LookupIP(name)
+		if err != nil {
+			continue
+		}
+
+		for _, ip := range ips {
+			if !ip.Equal(targetIP) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func ScanTLS(host Host, out chan<- string, geo *Geo) {
 	if host.IP == nil {
@@ -46,7 +70,7 @@ func ScanTLS(host Host, out chan<- string, geo *Geo) {
 	}
 	state := c.ConnectionState()
 	alpn := state.NegotiatedProtocol
-	domain := state.PeerCertificates[0].Subject.CommonName
+	domains := strings.Join(state.PeerCertificates[0].DNSNames, ", ")
 	issuers := strings.Join(state.PeerCertificates[0].Issuer.Organization, " | ")
 	length := 0
 	leaf := state.PeerCertificates[0]
@@ -60,34 +84,35 @@ func ScanTLS(host Host, out chan<- string, geo *Geo) {
 	log := slog.Info
 	feasible := true
 	geoCode := geo.GetGeo(host.IP)
-	if state.Version != tls.VersionTLS13 || alpn != "h2" || len(domain) == 0 || len(issuers) == 0 {
+
+	if state.Version != tls.VersionTLS13 || alpn != "h2" || len(issuers) == 0 || StrictCheck(leaf, host.IP) {
 		// not feasible
 		log = slog.Debug
 		feasible = false
 	} else {
 		out <- strings.Join([]string{
-			host.IP.String(), 
-			host.Origin, 
-			tls.VersionName(state.Version), 
+			host.IP.String(),
+			host.Origin,
+			tls.VersionName(state.Version),
 			alpn,
 			state.CurveID.String(),
 			strconv.Itoa(length) + "(certs count: " + strconv.Itoa(len(state.PeerCertificates)) + ")",
 			leaf.SignatureAlgorithm.String(),
 			leaf.PublicKeyAlgorithm.String(),
-			domain, 
-			"\"" + issuers + "\"", 
+			domains,
+			"\"" + issuers + "\"",
 			geoCode}, ",") + "\n"
 	}
-	log("Connected to target", "feasible", feasible, 
+	log("Connected to target", "feasible", feasible,
 		"ip", host.IP.String(),
 		"origin", host.Origin,
-		"tls", tls.VersionName(state.Version), 
-		"alpn", alpn, 
+		"tls", tls.VersionName(state.Version),
+		"alpn", alpn,
 		"curve", state.CurveID.String(),
-		"cert-length", strconv.Itoa(length) + "(certs count: " + strconv.Itoa(len(state.PeerCertificates)) + ")",
+		"cert-length", strconv.Itoa(length)+"(certs count: "+strconv.Itoa(len(state.PeerCertificates))+")",
 		"cert-signature", leaf.SignatureAlgorithm.String(),
 		"cert-publickey", leaf.PublicKeyAlgorithm.String(),
-		"cert-domain", domain, 
+		"cert-domains", domains,
 		"cert-issuer", issuers,
 		"geo", geoCode)
 }
