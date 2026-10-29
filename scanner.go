@@ -76,9 +76,9 @@ func ScanTLS(host Host, out chan<- string, geo *Geo) {
 	leaf := state.PeerCertificates[0]
 	for _, cert := range state.PeerCertificates {
 		length += len(cert.Raw)
-		if len(cert.DNSNames) != 0 {
-			leaf = cert
-		}
+		//if len(cert.DNSNames) != 0 {
+		//	leaf = cert
+		//}
 	}
 
 	log := slog.Info
